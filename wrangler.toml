@@ -1,0 +1,12 @@
+name = "amplop-kasih"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+# Secret (jalankan sekali):
+#   npx wrangler secret put GAS_URL      -> URL /exec Apps Script
+#   npx wrangler secret put SHARED_KEY   -> sama dengan Script property SHARED_KEY
