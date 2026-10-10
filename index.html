@@ -264,6 +264,13 @@ a,button,select,label,.envelope,.slip,[data-tab],input[type=file],input[type=col
 <div id="toast"></div>
 
 <script>
+/* === KONFIGURASI ===
+   Jika situs ini dihosting di GitHub Pages (atau selain Worker), isi API_URL dengan alamat Worker + /api
+   contoh: 'https://amplop-kasih.akunmu.workers.dev/api'. Jika dihosting oleh Worker, biarkan '/api'. */
+const API_URL = 'https://amplop-kasih.ppbltahun2025.workers.dev/api';
+const APP_BASE = location.origin + location.pathname.replace(/(\/v\/[\w-]+|index\.html)$/, '').replace(/\/?$/, '/');
+const viewLink = id => APP_BASE + '?v=' + id;
+const MUSIC_URL = APP_BASE + 'music.mp3';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const THEMES = {
   krem:{env:'#efe3cc',dk:'#d9c8a6',lt:'#f7efe0',paper:'#fffdf7',seal:'#9b2c2c',ink:'#3b2f2f',bg:'#f6efe4'},
@@ -283,12 +290,13 @@ let me = JSON.parse(localStorage.getItem('ak_me') || 'null');
 function setMe(u){me=u;u?localStorage.setItem('ak_me',JSON.stringify(u)):localStorage.removeItem('ak_me');drawAuth()}
 async function api(action,data={}){
   const body={action,...data}; if(me) body.sessionToken=me.sessionToken;
+  if(API_URL==='/api'&&/github\.io$/.test(location.hostname))return {ok:false,error:'API_URL belum diisi dengan alamat Worker (lihat bagian KONFIGURASI di index.html)'};
   try{
-    const r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const j=await r.json();
     if(!j.ok && /Sesi tidak valid/.test(j.error||'')) setMe(null);
     return j;
-  }catch(e){return {ok:false,error:'Tidak ada koneksi ke server'}}
+  }catch(e){return {ok:false,error:'Tidak bisa menghubungi Worker. Cek API_URL, deploy Worker, dan CORS.'}}
 }
 function readImg(file,max,q){return new Promise((res,rej)=>{
   const img=new Image(),u=URL.createObjectURL(file);
@@ -398,7 +406,7 @@ $('#btnSave').onclick=async()=>{
   const r=await api('saveCard',{id:editId,card:d,emailTo:$('#emailTo').value.trim()});
   b.disabled=false;b.textContent='Simpan dan buat link';
   if(!r.ok)return toast(r.error);
-  editId=r.id;const link=location.origin+'/v/'+r.id;
+  editId=r.id;const link=viewLink(r.id);
   const res=$('#result');res.hidden=false;
   res.innerHTML='<b>Tersimpan di Drive kamu.</b> <span></span> <button class="btn sm" id="cpy">Salin link</button> <a class="btn sm" target="_blank" rel="noopener">Kirim lewat WhatsApp</a>';
   res.querySelector('span').textContent=link;
@@ -417,7 +425,7 @@ async function loadMine(){
   if(!r.cards.length){box.innerHTML='<p>Belum ada amplop. Buat yang pertama di tab Buat amplop.</p>';return}
   box.replaceChildren();
   r.cards.forEach(c=>{
-    const link=location.origin+'/v/'+c.id,it=document.createElement('div');it.className='item';
+    const link=viewLink(c.id),it=document.createElement('div');it.className='item';
     it.innerHTML='<div><b></b><br><small></small></div><div class="row"><a class="btn sm" target="_blank" rel="noopener">Buka</a><button class="btn sm" data-a="cp">Salin link</button><button class="btn sm" data-a="mail">Kirim email</button><button class="btn sm" data-a="ed">Edit</button><button class="btn sm" data-a="del">Hapus</button></div>';
     it.querySelector('b').textContent=c.title;it.querySelector('small').textContent=new Date(c.createdAt).toLocaleString('id-ID');it.querySelector('a').href=link;
     it.onclick=async e=>{const a=e.target.dataset.a;if(!a)return;
@@ -473,9 +481,9 @@ const Music=(()=>{
   async function start(manual){
     if(playing||(!manual&&localStorage.ak_music==='off'))return;
     playing=true;localStorage.ak_music='on';draw();
-    if(!mode){try{const r=await fetch('/music.mp3',{method:'HEAD'});mode=r.ok&&/audio|octet/.test(r.headers.get('content-type')||'')?'file':'synth'}catch(e){mode='synth'}}
+    if(!mode){try{const r=await fetch(MUSIC_URL,{method:'HEAD'});mode=r.ok&&/audio|octet/.test(r.headers.get('content-type')||'')?'file':'synth'}catch(e){mode='synth'}}
     if(!playing)return;
-    if(mode==='file'){el=el||Object.assign(new Audio('/music.mp3'),{loop:true,volume:.5});el.play().catch(()=>{});return}
+    if(mode==='file'){el=el||Object.assign(new Audio(MUSIC_URL),{loop:true,volume:.5});el.play().catch(()=>{});return}
     if(!ctx)init();
     ctx.resume();if(!timer){next=ctx.currentTime+.1;timer=setInterval(sched,200)}
     master.gain.cancelScheduledValues(ctx.currentTime);master.gain.linearRampToValueAtTime(.8,ctx.currentTime+3)}
@@ -513,7 +521,7 @@ const Music=(()=>{
 /* ---------- start ---------- */
 (async function init(){
   drawAuth();
-  const m=location.pathname.match(/^\/v\/([\w-]+)/);
+  const qv=new URLSearchParams(location.search).get('v'),m=location.pathname.match(/\/v\/([\w-]+)$/)||(qv&&/^[\w-]+$/.test(qv)?[0,qv]:null);
   if(m){
     $('#top').hidden=$('#app').hidden=$('#home').hidden=true;const v=$('#viewer');v.hidden=false;v.textContent='';
     const r=await api('getCard',{id:m[1]});
@@ -524,7 +532,7 @@ const Music=(()=>{
     return;
   }
   const tk=new URLSearchParams(location.search).get('verify');
-  if(tk){history.replaceState({},'','/');const r=await api('verify',{token:tk});toast(r.ok?r.message:r.error);if(r.ok)openAuth('login')}
+  if(tk){history.replaceState({},'',location.pathname);const r=await api('verify',{token:tk});toast(r.ok?r.message:r.error);if(r.ok)openAuth('login')}
 })();
 </script>
 </body>
